@@ -101,8 +101,9 @@ void readData(Image& image, int dataPos) {
         if (isspace(byte)) continue;
         image.buffer.push_back(byte);
     }
-    std::cout << image.buffer.size();
+
 }
+
 
 App parseInput(int argc, char* argv[]) {
     App app{};
@@ -120,6 +121,70 @@ App parseInput(int argc, char* argv[]) {
     return app;
 }
 
+void blackWhiteToGrayscale(App& app) {
+    for (int byte : app.inputImage.buffer) {
+        app.outputImage.buffer.push_back(byte);
+    }
+    app.outputImage.depth = 2;
+}
+
+
+void grayscaleToBlackWhite(App &app) {
+    for (int& byte : app.inputImage.buffer) {
+        if (byte <= app.inputImage.depth / 2)
+            app.outputImage.buffer.push_back(1);
+        else
+            app.outputImage.buffer.push_back(0);
+    }
+}
+
+void grayscaleToColor(App &app) {
+    app.outputImage.depth = app.inputImage.depth;
+    for (int byte : app.inputImage.buffer) {
+        app.outputImage.buffer.push_back(byte);
+        app.outputImage.buffer.push_back(byte);
+        app.outputImage.buffer.push_back(byte);
+    }
+}
+
+void colorToGrayscale(App &app) {
+    app.outputImage.depth = app.inputImage.depth;
+    for (size_t i = 0; i < (app.inputImage.height * app.inputImage.width * 3); i += 3){
+        app.outputImage.buffer.push_back((app.inputImage.buffer[i] + app.inputImage.buffer[i+1] + app.inputImage.buffer[i+2]) / 3);
+    }
+}
+
+void colorToBlackWhite(App &app) {
+    for (size_t i = 0; i < (app.inputImage.height * app.inputImage.width * 3); i += 3){
+        int temp = (app.inputImage.buffer[i] + app.inputImage.buffer[i+1] + app.inputImage.buffer[i+2]) / 3;
+        if (temp <= app.inputImage.depth / 2)
+            app.outputImage.buffer.push_back(1);
+        else
+            app.outputImage.buffer.push_back(0);
+    }
+}
+
+void blackWhiteToColor(App& app) {
+    app.outputImage.depth = 255;
+    for (int byte : app.inputImage.buffer) {
+        if (byte == 1) {
+            app.outputImage.buffer.push_back(0);
+            app.outputImage.buffer.push_back(0);
+            app.outputImage.buffer.push_back(0);
+        } else {
+            app.outputImage.buffer.push_back(255);
+            app.outputImage.buffer.push_back(255);
+            app.outputImage.buffer.push_back(255);
+        }
+    }
+}
+
+
+void createImage(App& app) {
+    app.outputImage.width = app.inputImage.width;
+    app.outputImage.height = app.inputImage.height;
+}
+
 
 
 
@@ -127,5 +192,6 @@ App parseInput(int argc, char* argv[]) {
 
 int main(int argc, char* argv[]) {
     App app = parseInput(argc, argv);
+    createImage(app);
     return 0;
 }
