@@ -71,13 +71,37 @@ int readHeader(Image& image) {
     image.width = results[0];
     image.height = results[1];
     if (results.size() == 3) {
+        if (results[2] > 255){
+            std::cerr << "Unsupported color depth.";
+            exit(1);
+        }
+
         image.depth = results[2];
     }
-    std::ifstream ppp(image.path, std::ios_base::binary);
-    ppp.seekg(filePos, std::ios::beg);
-    std::cout << ppp.get();
-    std::cout << ppp.get();
     return filePos;
+}
+
+void readData(Image& image, int dataPos) {
+    std::ifstream data(image.path);
+    data.seekg(dataPos, std::ios::beg);
+    int byte;
+    bool COMMENT_FLAG = false;
+    while (true) {
+        byte = data.get();
+        if (byte < 0) break;
+        if (COMMENT_FLAG && byte != '\n') continue;
+        if (COMMENT_FLAG) {
+            COMMENT_FLAG = false;
+            continue;
+        }
+        if (byte == '#') {
+            COMMENT_FLAG = true;
+            continue;
+        }
+        if (isspace(byte)) continue;
+        image.buffer.push_back(byte);
+    }
+    std::cout << image.buffer.size();
 }
 
 App parseInput(int argc, char* argv[]) {
@@ -92,6 +116,7 @@ App parseInput(int argc, char* argv[]) {
     app.outputImage.path = argv[2];
     app.outputImage.format = argv[3][1] - '0';
     int dataPos = readHeader(app.inputImage);
+    readData(app.inputImage, dataPos);
     return app;
 }
 
