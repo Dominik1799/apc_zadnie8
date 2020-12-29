@@ -11,12 +11,10 @@ struct Image {
     int format;
     size_t width;
     size_t height;
-    size_t depth;
+    size_t depth{0};
 };
 
 struct App {
-    int readType;
-    int writeType;
     Image inputImage;
     Image outputImage;
 };
@@ -99,9 +97,13 @@ void readData(Image& image, int dataPos) {
             continue;
         }
         if (isspace(byte)) continue;
-        image.buffer.push_back(byte);
+        if (image.format == 4) {
+            for (int i = 7; i >= 0; i--) {
+                image.buffer.push_back(((byte >> i) & 1));
+            }
+        } else
+            image.buffer.push_back(byte);
     }
-
 }
 
 
@@ -183,6 +185,22 @@ void blackWhiteToColor(App& app) {
 void createImage(App& app) {
     app.outputImage.width = app.inputImage.width;
     app.outputImage.height = app.inputImage.height;
+    int inType = (app.inputImage.format % 4) + (app.inputImage.format / 4);
+    int outType = (app.outputImage.format % 4) + (app.outputImage.format / 4);
+    if (inType == 1 && outType == 2) blackWhiteToGrayscale(app);
+    else if (inType == 1 && outType == 3) blackWhiteToColor(app);
+    else if (inType == 2 && outType == 1) grayscaleToBlackWhite(app);
+    else if (inType == 2 && outType == 3) grayscaleToColor(app);
+    else if (inType == 3 && outType == 1) colorToBlackWhite(app);
+    else if (inType == 3 && outType == 2) colorToGrayscale(app);
+    else if (inType == outType) {
+        app.outputImage.buffer = app.inputImage.buffer;
+        app.outputImage.depth = app.inputImage.depth;
+    }
+}
+
+void writeImage(App& app) {
+
 }
 
 
@@ -193,5 +211,6 @@ void createImage(App& app) {
 int main(int argc, char* argv[]) {
     App app = parseInput(argc, argv);
     createImage(app);
+    writeImage(app);
     return 0;
 }
