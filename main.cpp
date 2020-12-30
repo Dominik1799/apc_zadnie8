@@ -4,6 +4,7 @@
 #include <string>
 #include <fstream>
 #include <sstream>
+#include <math.h>
 
 struct Image {
     std::string path;
@@ -84,6 +85,7 @@ void readData(Image& image, int dataPos) {
     data.seekg(dataPos, std::ios::beg);
     int byte;
     bool COMMENT_FLAG = false;
+    std::string num;
     while (true) {
         byte = data.get();
         if (byte < 0) break;
@@ -96,13 +98,28 @@ void readData(Image& image, int dataPos) {
             COMMENT_FLAG = true;
             continue;
         }
-        if (isspace(byte)) continue;
+        if (isspace(byte) && num.empty()) continue;
+        if (isspace(byte) && !num.empty()) {
+            try {
+                image.buffer.push_back(std::stoi(num));
+                num.clear();
+                continue;
+            } catch (std::exception& e) {
+                std::cerr << "wrong data format.";
+                exit(1);
+            }
+        }
         if (image.format == 4) {
             for (int i = 7; i >= 0; i--) {
                 image.buffer.push_back(((byte >> i) & 1));
             }
-        } else
+        } else if (image.format > 4)
             image.buffer.push_back(byte);
+        else if (image.format == 1)
+            image.buffer.push_back(byte - '0');
+        else {
+            num.push_back(byte);
+        }
     }
 }
 
@@ -127,7 +144,7 @@ void blackWhiteToGrayscale(App& app) {
     for (int byte : app.inputImage.buffer) {
         app.outputImage.buffer.push_back(byte);
     }
-    app.outputImage.depth = 2;
+    app.outputImage.depth = 1;
 }
 
 
@@ -152,13 +169,13 @@ void grayscaleToColor(App &app) {
 void colorToGrayscale(App &app) {
     app.outputImage.depth = app.inputImage.depth;
     for (size_t i = 0; i < (app.inputImage.height * app.inputImage.width * 3); i += 3){
-        app.outputImage.buffer.push_back((app.inputImage.buffer[i] + app.inputImage.buffer[i+1] + app.inputImage.buffer[i+2]) / 3);
+        app.outputImage.buffer.push_back(std::round((app.inputImage.buffer[i] + app.inputImage.buffer[i+1] + app.inputImage.buffer[i+2]) / 3));
     }
 }
 
 void colorToBlackWhite(App &app) {
     for (size_t i = 0; i < (app.inputImage.height * app.inputImage.width * 3); i += 3){
-        int temp = (app.inputImage.buffer[i] + app.inputImage.buffer[i+1] + app.inputImage.buffer[i+2]) / 3;
+        int temp = std::round((app.inputImage.buffer[i] + app.inputImage.buffer[i+1] + app.inputImage.buffer[i+2]) / 3);
         if (temp <= app.inputImage.depth / 2)
             app.outputImage.buffer.push_back(1);
         else
@@ -199,7 +216,67 @@ void createImage(App& app) {
     }
 }
 
+unsigned char reverse(unsigned char b) {
+    b = (b & 0xF0) >> 4 | (b & 0x0F) << 4;
+    b = (b & 0xCC) >> 2 | (b & 0x33) << 2;
+    b = (b & 0xAA) >> 1 | (b & 0x55) << 1;
+    return b;
+}
+
+void writeBinary(App& app) {
+    std::ofstream dataWriter(app.outputImage.path, std::ios::app | std::ios::binary);
+    if (app.outputImage.format == 4) {
+        for (int i = 0; i < app.outputImage.buffer.size(); i += 8) {
+            unsigned char bitBuffer{0};
+            size_t limit = app.outputImage.buffer.size() - i >= 8 ? 8 : app.outputImage.buffer.size() - i;
+            for (size_t j = 0; j < limit; j++) {
+                bitBuffer += app.outputImage.buffer[i + j] << j | 0;
+            }
+//            bitBuffer += app.outputImage.buffer[i] | 0;
+//            bitBuffer += app.outputImage.buffer[i+1] << 1 | 0;
+//            bitBuffer += app.outputImage.buffer[i+2] << 2 | 0;
+//            bitBuffer += app.outputImage.buffer[i+3] << 3 | 0;
+//            bitBuffer += app.outputImage.buffer[i+4] << 4 | 0;
+//            bitBuffer += app.outputImage.buffer[i+5] << 5 | 0;
+//            bitBuffer += app.outputImage.buffer[i+6] << 6 | 0;
+//            bitBuffer += app.outputImage.buffer[i+7] << 7 | 0;
+            bitBuffer = reverse(bitBuffer);
+            dataWriter.write((char *)&bitBuffer,1);
+        }
+    } else {
+        for (int data : app.outputImage.buffer) {
+            dataWriter.write((char *)&data,1);
+        }
+    }
+
+}
+
+void writeAscii(App& app) {
+    std::ofstream dataWriter(app.outputImage.path, std::ios::app);
+    std::string delimiter = app.outputImage.format == 1 ? "" : " ";
+    for (int& data : app.outputImage.buffer) {
+        dataWriter << data << delimiter;
+    }
+    dataWriter.close();
+}
+
+
 void writeImage(App& app) {
+    std::ofstream headerWriter(app.outputImage.path);
+    headerWriter << "P" << app.outputImage.format << std::endl;
+    headerWriter << app.outputImage.width << " " << app.outputImage.height << std::endl;
+    if (app.outputImage.format != 1 && app.outputImage.format != 4)
+        headerWriter << app.outputImage.depth << std::endl;
+    headerWriter.close();
+//    std::ofstream p(app.outputImage.path, std::ios::app | std::ios::binary);
+//    int a;
+//    a = 254;
+//    p.write((char *)&a,1);
+
+    if (app.outputImage.format < 4)
+        writeAscii(app);
+    else
+        writeBinary(app);
 
 }
 
