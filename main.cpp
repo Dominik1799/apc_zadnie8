@@ -84,25 +84,20 @@ void readBinary(Image& image, int dataPos) {
     std::ifstream reader(image.path, std::ios::binary);
     reader.seekg(dataPos, std::ios::beg);
     size_t bitCounter{0};
+    int byteCounter{0};
     int byte;
-    while (true) {
-        byte = reader.get();
-        if (byte < 0 && reader.eof())
-            break;
+    while (!reader.eof()) {
+        reader.read((char *)&byte,1);
+        byteCounter++;
         if (image.format == 4) {
-            if (bitCounter > image.width) {
-                for (int i = 0; i < bitCounter - image.width; i++)
-                    image.buffer.pop_back();
-                bitCounter = 0;
-            }
-            for (int i = 7; i >= 0; i--) {
+            for (int i = 7; i >= 0; i--){
                 image.buffer.push_back(((byte >> i) & 1));
-                bitCounter++;
             }
         } else {
             image.buffer.push_back(byte);
         }
     }
+    std::cout << "Precitane byty: " << byteCounter << "nacitane bity: " << image.buffer.size();
 }
 
 void readASCII(Image& image, int dataPos) {
@@ -111,34 +106,21 @@ void readASCII(Image& image, int dataPos) {
     int byte;
     bool COMMENT_FLAG = false;
     std::string num;
-
-}
-
-
-void readData(Image& image, int dataPos) {
-    std::ifstream data(image.path);
-    data.seekg(dataPos, std::ios::beg);
-    int byte;
-    bool COMMENT_FLAG = false;
-    std::string num;
-    int bruh{0};
-    size_t bitCounter{0};
     while (true) {
-        byte = data.get();
-        if (byte < 0 && data.eof())
+        byte = reader.get();
+        if (byte < 0 && reader.eof())
             break;
-        bruh++;
         if (COMMENT_FLAG && byte != '\n')
             continue;
         if (COMMENT_FLAG) {
             COMMENT_FLAG = false;
             continue;
         }
-        if (byte == '#' && image.format < 4) {
+        if (byte == '#') {
             COMMENT_FLAG = true;
             continue;
         }
-        if (isspace(byte) && num.empty() && image.format < 4)
+        if (isspace(byte) && num.empty())
             continue;
         if (isspace(byte) && !num.empty()) {
             try {
@@ -150,24 +132,19 @@ void readData(Image& image, int dataPos) {
                 exit(1);
             }
         }
-        if (image.format == 4) {
-            if (bitCounter > image.width) {
-                for (int i = 0; i < bitCounter - image.width; i++)
-                    image.buffer.pop_back();
-                bitCounter = 0;
-            }
-            for (int i = 7; i >= 0; i--) {
-                image.buffer.push_back(((byte >> i) & 1));
-                bitCounter++;
-            }
-        } else if (image.format > 4)
-            image.buffer.push_back(byte);
-        else if (image.format == 1)
+        if (image.format == 1)
             image.buffer.push_back(byte - '0');
-        else {
+        else
             num.push_back(byte);
-        }
     }
+}
+
+
+void readData(Image& image, int dataPos) {
+    if (image.format < 4)
+        readASCII(image, dataPos);
+    else
+        readBinary(image, dataPos);
 }
 
 
@@ -189,7 +166,10 @@ App parseInput(int argc, char* argv[]) {
 
 void blackWhiteToGrayscale(App& app) {
     for (int byte : app.inputImage.buffer) {
-        app.outputImage.buffer.push_back(byte);
+        if (byte == 0)
+            app.outputImage.buffer.push_back(1);
+        else
+            app.outputImage.buffer.push_back(0);
     }
     app.outputImage.depth = 1;
 }
@@ -197,7 +177,7 @@ void blackWhiteToGrayscale(App& app) {
 
 void grayscaleToBlackWhite(App &app) {
     for (int& byte : app.inputImage.buffer) {
-        if (byte <= app.inputImage.depth / 2)
+        if (byte <= std::round(app.inputImage.depth / 2))
             app.outputImage.buffer.push_back(1);
         else
             app.outputImage.buffer.push_back(0);
@@ -270,33 +250,41 @@ unsigned char reverse(unsigned char b) {
     return b;
 }
 
-std::vector<unsigned char> createP4(Image& image) {
+std::vector<unsigned char> createP4(Image& image, int prevFormat) {
     std::vector<unsigned char> bytes;
-    size_t dataPointer{0};
     unsigned char bitBuffer{0};
     size_t bitCounter{0};
-    for (size_t height = 0; height < image.height; height++) {
-        for (size_t width = 0; width < image.width; width++) {
-            if (bitCounter > 7) {
-                bytes.push_back(reverse(bitBuffer));
-                bitBuffer = 0;
-                bitCounter = 0;
-            }
-            bitBuffer += (image.buffer[dataPointer++] << bitCounter++) | 0;
+    char byteFlag{0};
+    for (int byte : image.buffer) {
+        if (byteFlag == 7) {
+            bytes.push_back(bitBuffer);
+            bitBuffer = 0;
+            byteFlag = 0;
+        } else if (bitCounter == image.width && prevFormat != 4) {
+            bitBuffer <<= 7-byteFlag; // posun to o ten rozdiel nech tam su nuly
+            bytes.push_back(bitBuffer);
+            bitBuffer = 0;
+            byteFlag = 0;
+            bitCounter = 0;
         }
-        if (bitCounter != 8)
-            bytes.push_back(reverse(bitBuffer));
-        bitBuffer = 0;
-        bitCounter = 0;
+        byteFlag++;
+        bitCounter++;
+        bitBuffer |= byte;
+        bitBuffer <<= 1;
     }
-
+    if (byteFlag == 7) {
+        bytes.push_back(bitBuffer);
+    } else {
+        bitBuffer <<= 7-byteFlag; // posun to o ten rozdiel nech tam su nuly
+        bytes.push_back(bitBuffer);
+    }
     return bytes;
 }
 
 void writeBinary(App& app) {
     std::ofstream dataWriter(app.outputImage.path, std::ios::app | std::ios::binary);
     if (app.outputImage.format == 4) {
-        std::vector<unsigned char> bytes = createP4(app.outputImage);
+        std::vector<unsigned char> bytes = createP4(app.outputImage, app.inputImage.format);
         for (auto byte : bytes)
             dataWriter.write((char *)&byte,1);
     } else {
